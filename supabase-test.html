@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Scratch — Supabase Connection Test</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #0f1411;
+    --card: #18201b;
+    --line: #2a352d;
+    --ink: #eef3ef;
+    --dim: #9bb0a3;
+    --lime: #c5f04a;
+    --green: #34c759;
+    --red: #ff453a;
+    --amber: #ffd60a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px 18px 60px; line-height: 1.45;
+    max-width: 560px; margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin: 0 0 2px; letter-spacing: -0.02em; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 22px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--dim); margin: 0 0 12px; font-weight: 600; }
+  .row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0;
+    font-size: 14px; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: none; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #555;
+    margin-top: 6px; flex: 0 0 auto; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(52,199,89,.6); }
+  .dot.err { background: var(--red); box-shadow: 0 0 8px rgba(255,69,58,.6); }
+  .dot.wait { background: var(--amber); }
+  .row .label { flex: 1; }
+  .row .detail { display: block; color: var(--dim); font-size: 12px; margin-top: 2px;
+    word-break: break-word; }
+  button {
+    font: inherit; font-weight: 600; font-size: 15px; border: none;
+    border-radius: 11px; padding: 13px 16px; width: 100%; cursor: pointer;
+    margin-top: 8px;
+  }
+  .primary { background: var(--lime); color: #18201b; }
+  .ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
+  input {
+    font: inherit; font-size: 15px; width: 100%; padding: 12px 14px;
+    border-radius: 11px; border: 1px solid var(--line);
+    background: #11160f; color: var(--ink); margin-bottom: 4px;
+  }
+  .me { font-size: 13px; }
+  .me b { color: var(--lime); }
+  pre { background: #0b0f0c; border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px; font-size: 11.5px; color: var(--dim); overflow-x: auto;
+    white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 10px; }
+  a { color: var(--lime); }
+</style>
+</head>
+<body>
+  <h1>Scratch · Connection Test</h1>
+  <div class="sub">Verifies your Supabase backend end-to-end before we wire the real app.</div>
+
+  <div class="card">
+    <h2>1 · Backend</h2>
+    <div class="row"><span class="dot" id="d-lib"></span><span class="label">Supabase client library loaded<span class="detail" id="t-lib">checking…</span></span></div>
+    <div class="row"><span class="dot" id="d-init"></span><span class="label">Client initialized with your URL + anon key<span class="detail" id="t-init">checking…</span></span></div>
+    <div class="row"><span class="dot" id="d-reach"></span><span class="label">Database reachable + security (RLS) responding<span class="detail" id="t-reach">checking…</span></span></div>
+  </div>
+
+  <div class="card" id="signedOut">
+    <h2>2 · Sign in</h2>
+    <button class="primary" onclick="signInGoogle()">Sign in with Google</button>
+    <input id="email" type="email" inputmode="email" autocomplete="email" placeholder="you@email.com" />
+    <button class="ghost" onclick="signInEmail()">Send me a magic link</button>
+    <div class="hint">If Google fails, the error below tells us exactly what to fix (usually a redirect-URL mismatch).</div>
+  </div>
+
+  <div class="card" id="signedIn" style="display:none;">
+    <h2>2 · Signed in</h2>
+    <div class="me" id="meBox"></div>
+    <div class="row" style="margin-top:10px;"><span class="dot" id="d-prof"></span><span class="label">Profile row auto-created (signup trigger)<span class="detail" id="t-prof">checking…</span></span></div>
+    <div class="row"><span class="dot" id="d-write"></span><span class="label">Can write my own data (RLS allows it)<span class="detail" id="t-write">checking…</span></span></div>
+    <button class="danger" onclick="signOut()" style="margin-top:14px;">Sign out</button>
+  </div>
+
+  <div class="card">
+    <h2>Log</h2>
+    <pre id="log">starting…</pre>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://krcwphxjzbahocwewbzn.supabase.co";
+    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtyY3dwaHhqemJhaG9jd2V3YnpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0OTA0OTQsImV4cCI6MjA5ODA2NjQ5NH0.hjzjoYptVbpA725fWfWoeqzgda68mAztW3L3pZuBtgo";
+
+    const $ = (id) => document.getElementById(id);
+    const logEl = $("log");
+    const lines = [];
+    function log(msg) {
+      lines.push(new Date().toLocaleTimeString() + "  " + msg);
+      logEl.textContent = lines.slice(-40).join("\n");
+    }
+    function mark(id, state, detail) {
+      const dot = $("d-" + id), txt = $("t-" + id);
+      if (dot) dot.className = "dot " + (state === true ? "ok" : state === false ? "err" : "wait");
+      if (txt && detail != null) txt.textContent = detail;
+    }
+
+    let supa = null;
+
+    // ---- Step 1: library + init ----
+    if (window.supabase && window.supabase.createClient) {
+      mark("lib", true, "loaded from CDN");
+      log("Supabase JS library loaded.");
+      try {
+        supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+        mark("init", true, SUPABASE_URL.replace("https://", ""));
+        log("Client initialized.");
+      } catch (e) {
+        mark("init", false, e.message);
+        log("Init error: " + e.message);
+      }
+    } else {
+      mark("lib", false, "CDN script did not load — check your connection");
+      log("ERROR: supabase-js failed to load.");
+    }
+
+    // ---- Step 1c: reachability + RLS ----
+    async function checkReach() {
+      if (!supa) return;
+      mark("reach", "wait", "querying…");
+      try {
+        // Unauthenticated select on profiles. RLS requires 'authenticated',
+        // so anon should get an empty array (not an error) — that means the DB
+        // is reachable AND RLS is active. A network/40x error means trouble.
+        const { data, error } = await supa.from("profiles").select("id").limit(1);
+        if (error) {
+          // A "relation does not exist" means SQL wasn't run.
+          if (/does not exist/i.test(error.message)) {
+            mark("reach", false, "Tables missing — run the SQL script first");
+          } else {
+            mark("reach", false, error.message);
+          }
+          log("Reach/RLS error: " + error.message);
+        } else {
+          mark("reach", true, "DB reachable, RLS active (anon sees " + (data?.length || 0) + " rows)");
+          log("Reachability OK. Returned " + (data?.length || 0) + " rows as anon.");
+        }
+      } catch (e) {
+        mark("reach", false, e.message);
+        log("Reach exception: " + e.message);
+      }
+    }
+
+    // ---- Auth actions ----
+    async function signInGoogle() {
+      log("Starting Google OAuth…");
+      const { error } = await supa.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.href.split("#")[0] }
+      });
+      if (error) log("Google sign-in error: " + error.message);
+    }
+
+    async function signInEmail() {
+      const email = $("email").value.trim();
+      if (!email) { log("Enter an email first."); return; }
+      log("Sending magic link to " + email + " …");
+      const { error } = await supa.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.href.split("#")[0] }
+      });
+      if (error) log("Magic-link error: " + error.message);
+      else log("Magic link sent. Check your email (and spam).");
+    }
+
+    async function signOut() {
+      await supa.auth.signOut();
+      log("Signed out.");
+      render(null);
+    }
+
+    // ---- Render signed-in/out state ----
+    async function render(session) {
+      if (session && session.user) {
+        $("signedOut").style.display = "none";
+        $("signedIn").style.display = "block";
+        const u = session.user;
+        $("meBox").innerHTML =
+          "Signed in as <b>" + (u.email || u.id) + "</b><br>" +
+          "<span style='color:var(--dim);font-size:12px'>user id: " + u.id + "</span>";
+        log("Session active: " + (u.email || u.id));
+        await checkProfile(u.id);
+      } else {
+        $("signedOut").style.display = "block";
+        $("signedIn").style.display = "none";
+      }
+    }
+
+    // ---- Authenticated checks: profile row + write ----
+    async function checkProfile(uid) {
+      mark("prof", "wait", "checking…");
+      try {
+        const { data, error } = await supa.from("profiles").select("*").eq("id", uid).maybeSingle();
+        if (error) { mark("prof", false, error.message); log("Profile read error: " + error.message); return; }
+        if (data) {
+          mark("prof", true, "handle: " + data.handle);
+          log("Profile row found (trigger works).");
+          await checkWrite(uid, data);
+        } else {
+          mark("prof", false, "No profile row — signup trigger may not have run");
+          log("No profile row for this user.");
+        }
+      } catch (e) { mark("prof", false, e.message); }
+    }
+
+    async function checkWrite(uid, profile) {
+      mark("write", "wait", "testing update…");
+      try {
+        const stamp = new Date().toISOString();
+        const { error } = await supa.from("profiles")
+          .update({ updated_at: stamp }).eq("id", uid);
+        if (error) { mark("write", false, error.message); log("Write blocked: " + error.message); }
+        else { mark("write", true, "update succeeded — RLS write OK"); log("Write test OK."); }
+      } catch (e) { mark("write", false, e.message); }
+    }
+
+    // ---- Boot ----
+    (async () => {
+      await checkReach();
+      if (supa) {
+        const { data } = await supa.auth.getSession();
+        await render(data.session);
+        supa.auth.onAuthStateChange((_evt, session) => render(session));
+      }
+    })();
+  </script>
+</body>
+</html>
