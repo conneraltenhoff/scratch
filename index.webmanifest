@@ -1,0 +1,31 @@
+{
+  "name": "Scratch",
+  "short_name": "Scratch",
+  "description": "Scratch golf tracking.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f2e1f",
+  "theme_color": "#0f2e1f",
+  "icons": [
+    {
+      "src": "app-assets/scratch-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "scratch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "app-assets/scratch-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
