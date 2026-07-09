@@ -4,7 +4,7 @@
  */
 
 // Bump this string whenever you change the SW so browsers pick up the new version.
-const SW_VERSION = 'scratch-sw-v1';
+const SW_VERSION = 'scratch-sw-v2';
 
 self.addEventListener('install', (event) => {
   // Activate the new SW immediately rather than waiting for old tabs to close.
@@ -38,16 +38,23 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-/* Tapping a notification focuses an open tab (or opens one) and navigates to the target. */
+/* Tapping a notification focuses an open tab (or opens one) and navigates to the target.
+ * Inbox notifications (tag "inbox" or a url containing #inbox) also tell the running app to
+ * open the in-app inbox directly, and cold starts land on a #inbox hash the app reads on load. */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || './admin.html';
+  const d = event.notification.data || {};
+  const wantInbox = (event.notification.tag === 'inbox') || (typeof d.url === 'string' && d.url.indexOf('#inbox') > -1) || d.inbox === true;
+  let target = d.url || './index.html';
+  if (wantInbox && target.indexOf('#') === -1) target += '#inbox';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
         if ('focus' in client) {
           client.focus();
-          if ('navigate' in client) { try { client.navigate(target); } catch (e) {} }
+          // App is already running — ask it to open the inbox without a reload.
+          if (wantInbox) { try { client.postMessage({ type: 'open-inbox' }); } catch (e) {} }
+          else if ('navigate' in client) { try { client.navigate(target); } catch (e) {} }
           return;
         }
       }
