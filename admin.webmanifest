@@ -5,7 +5,7 @@
   "start_url": "./admin.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0f2e1f",
   "theme_color": "#0f2e1f",
   "icons": [
