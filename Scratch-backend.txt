@@ -1,0 +1,286 @@
+// Scratch — backend (Cloudflare Worker)
+// ---------------------------------------------------------------
+// This one tiny service does TWO jobs, and keeps BOTH your secret
+// keys here on the server where nobody can see them:
+//
+//   1. POST  /            -> Scorecard photo scanning + custom game
+//                            generation (Claude).
+//                            Uses secret  ANTHROPIC_API_KEY
+//   2. GET   /v1/search?search_query=...   -> Course search
+//      GET   /v1/courses/{id}              -> Full course data
+//                            Uses secret  GOLF_API_KEY   (golfcourseapi.com)
+//
+// SETUP (one time — already done, secrets are already set):
+//   1. Cloudflare dashboard -> Workers & Pages -> open your
+//      "scratch-scan" worker -> Edit code -> paste THIS whole file -> Deploy.
+//   2. Settings -> Variables and Secrets -> TWO secrets must exist:
+//         Name: ANTHROPIC_API_KEY   Value: (console.anthropic.com -> API Keys)
+//         Name: GOLF_API_KEY        Value: (your key from golfcourseapi.com)
+//   3. That's it — the phone app already points at this Worker URL.
+//
+// AUTH (added Aug 2026) --------------------------------------------
+// Every request that spends one of your API keys is checked against a
+// Supabase access token (the JWT the app already gets when you sign in
+// with Google). Verification uses Supabase's PUBLIC key, fetched from its
+// JWKS endpoint — so there is NO new secret to add here.
+//
+// ROLLOUT IS TWO-STAGE. Right now ENFORCE_AUTH is false, which means:
+//   - nothing is blocked; the app keeps working exactly as before
+//   - every request is LOGGED with whether a valid token was present
+// Watch those logs (`wrangler tail scratch-scan`, or the Worker's Logs tab).
+// Once the app is sending tokens and the logs show "auth=ok" for real
+// traffic, flip ENFORCE_AUTH to true and redeploy to start rejecting
+// unauthenticated calls with 401.
+//
+// Flipping this to true BEFORE the app sends an Authorization header will
+// break scanning, game generation, and course search for every user.
+// ---------------------------------------------------------------
+
+
+const GOLF_API = 'https://api.golfcourseapi.com';
+
+// ---- Auth configuration -----------------------------------------
+// Set to true ONLY after the app is confirmed to send "Authorization: Bearer <token>".
+const ENFORCE_AUTH = false;
+
+const SUPABASE_URL = 'https://krcwphxjzbahocwewbzn.supabase.co';
+const JWKS_URL = SUPABASE_URL + '/auth/v1/.well-known/jwks.json';
+const EXPECTED_ISS = SUPABASE_URL + '/auth/v1';
+
+// JWKS is cached in the isolate. Supabase rotates keys rarely; a miss on a new
+// kid forces a refetch below, so a stale cache self-heals rather than locking users out.
+let _jwks = null;
+let _jwksAt = 0;
+const JWKS_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+
+const CORS = {
+ 'Access-Control-Allow-Origin': '*',
+ // Authorization must be allowed here or the browser preflight strips the token.
+ 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+ 'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+
+export default {
+ async fetch(request, env) {
+   // Preflight
+   if (request.method === 'OPTIONS') {
+     return new Response(null, { status: 204, headers: CORS });
+   }
+
+
+   const url = new URL(request.url);
+   const path = url.pathname;
+
+
+   // The bare root is a harmless status page — it spends no API key, so it stays open.
+   const isRoot = request.method === 'GET' && path !== '/v1/search' && !path.endsWith('/v1/search') && !/\/v1\/courses\/(\d+)\/?$/.test(path);
+
+
+   // ---- Auth gate (everything that costs money) -----------------
+   if (!isRoot) {
+     const auth = await checkAuth(request);
+     console.log(JSON.stringify({
+       msg: 'request', method: request.method, path,
+       auth: auth.ok ? 'ok' : 'fail',
+       reason: auth.ok ? undefined : auth.reason,
+       sub: auth.ok ? auth.sub : undefined,
+       enforcing: ENFORCE_AUTH,
+     }));
+     if (!auth.ok && ENFORCE_AUTH) {
+       return json({ error: 'Unauthorized', detail: auth.reason }, 401);
+     }
+   }
+
+
+   // ---- Course API proxy (GET) ----------------------------------
+   if (request.method === 'GET') {
+     // /v1/search?search_query=...
+     if (path === '/v1/search' || path.endsWith('/v1/search')) {
+       const q = url.searchParams.get('search_query') || url.searchParams.get('q') || '';
+       if (!q.trim()) return json({ error: 'Missing search_query' }, 400);
+       return proxyGolf(env, '/v1/search?search_query=' + encodeURIComponent(q.trim()));
+     }
+     // /v1/courses/{id}
+     const m = path.match(/\/v1\/courses\/(\d+)\/?$/);
+     if (m) {
+       return proxyGolf(env, '/v1/courses/' + m[1]);
+     }
+     // friendly root response
+     return json({ ok: true, service: 'scratch-backend', routes: ['POST / (scan)', 'GET /v1/search', 'GET /v1/courses/{id}'] });
+   }
+
+
+   // ---- Scorecard scan (POST) -----------------------------------
+   if (request.method !== 'POST') {
+     return json({ error: 'POST a JSON body { image, media_type, prompt }' }, 405);
+   }
+
+
+   let body;
+   try { body = await request.json(); }
+   catch (e) { return json({ error: 'Invalid JSON body' }, 400); }
+
+
+   const image = body.image;                       // base64, no data: prefix (OPTIONAL)
+   const mediaType = body.media_type || 'image/jpeg';
+   const prompt = body.prompt || 'Read this golf scorecard and return compact JSON.';
+   // Text-only mode: if no image is sent, we just ask Claude the prompt (used by the
+   // custom game generator, which is 100% text-driven — no photo involved).
+   if (!image && !prompt) return json({ error: 'Missing "image" or "prompt"' }, 400);
+   if (!env.ANTHROPIC_API_KEY) return json({ error: 'Server missing ANTHROPIC_API_KEY' }, 500);
+
+
+   const content = [];
+   if (image) content.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: image } });
+   content.push({ type: 'text', text: prompt });
+
+
+   try {
+     const r = await fetch('https://api.anthropic.com/v1/messages', {
+       method: 'POST',
+       headers: {
+         'content-type': 'application/json',
+         'x-api-key': env.ANTHROPIC_API_KEY,
+         'anthropic-version': '2023-06-01',
+       },
+       body: JSON.stringify({
+         model: 'claude-sonnet-5',
+         max_tokens: 2048,
+         messages: [{ role: 'user', content: content }],
+       }),
+     });
+
+
+     const data = await r.json();
+     if (!r.ok) return json({ error: 'Anthropic error', detail: data }, r.status);
+
+
+     const text = (data.content || []).map(b => b.text || '').join('').trim();
+     return json({ text });
+   } catch (e) {
+     return json({ error: String(e) }, 502);
+   }
+ },
+};
+
+
+// ---- Supabase JWT verification (ES256, public key via JWKS) ------
+// Returns { ok: true, sub } or { ok: false, reason }.
+async function checkAuth(request) {
+ const hdr = request.headers.get('Authorization') || '';
+ const m = hdr.match(/^Bearer\s+(.+)$/i);
+ if (!m) return { ok: false, reason: 'no bearer token' };
+ const token = m[1].trim();
+
+ const parts = token.split('.');
+ if (parts.length !== 3) return { ok: false, reason: 'malformed jwt' };
+
+ let header, payload;
+ try {
+   header = JSON.parse(b64urlToText(parts[0]));
+   payload = JSON.parse(b64urlToText(parts[1]));
+ } catch (e) { return { ok: false, reason: 'undecodable jwt' }; }
+
+ // Only accept the asymmetric algorithm this project actually publishes.
+ // Refusing anything else prevents an "alg: none" / algorithm-confusion downgrade.
+ if (header.alg !== 'ES256') return { ok: false, reason: 'unexpected alg ' + header.alg };
+
+ const key = await getKey(header.kid);
+ if (!key) return { ok: false, reason: 'unknown kid' };
+
+ let valid = false;
+ try {
+   valid = await crypto.subtle.verify(
+     { name: 'ECDSA', hash: 'SHA-256' },
+     key,
+     b64urlToBytes(parts[2]),
+     new TextEncoder().encode(parts[0] + '.' + parts[1])
+   );
+ } catch (e) { return { ok: false, reason: 'verify threw' }; }
+ if (!valid) return { ok: false, reason: 'bad signature' };
+
+ const now = Math.floor(Date.now() / 1000);
+ if (payload.exp && now >= payload.exp) return { ok: false, reason: 'expired' };
+ if (payload.nbf && now < payload.nbf) return { ok: false, reason: 'not yet valid' };
+ if (payload.iss && payload.iss !== EXPECTED_ISS) return { ok: false, reason: 'wrong issuer' };
+ if (payload.aud && payload.aud !== 'authenticated') return { ok: false, reason: 'wrong audience' };
+ if (!payload.sub) return { ok: false, reason: 'no subject' };
+
+ return { ok: true, sub: payload.sub };
+}
+
+
+// Fetch (and cache) Supabase's public signing keys, importing the one matching `kid`.
+async function getKey(kid) {
+ if (!kid) return null;
+ let found = pickJwk(kid);
+ if (!found) {
+   // Cache miss or key rotation — refetch once.
+   try {
+     const r = await fetch(JWKS_URL, { headers: { accept: 'application/json' } });
+     if (!r.ok) return null;
+     _jwks = await r.json();
+     _jwksAt = Date.now();
+   } catch (e) { return null; }
+   found = pickJwk(kid);
+ }
+ if (!found) return null;
+ try {
+   // Import a minimal JWK — extra members like "ext"/"key_ops" can be rejected.
+   return await crypto.subtle.importKey(
+     'jwk',
+     { kty: found.kty, crv: found.crv, x: found.x, y: found.y },
+     { name: 'ECDSA', namedCurve: 'P-256' },
+     false,
+     ['verify']
+   );
+ } catch (e) { return null; }
+}
+
+function pickJwk(kid) {
+ if (!_jwks || !Array.isArray(_jwks.keys)) return null;
+ if (Date.now() - _jwksAt > JWKS_TTL_MS) return null; // force a refresh
+ return _jwks.keys.find(k => k.kid === kid) || null;
+}
+
+function b64urlToBytes(s) {
+ const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4);
+ const bin = atob(b64);
+ const out = new Uint8Array(bin.length);
+ for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+ return out;
+}
+
+function b64urlToText(s) {
+ return new TextDecoder().decode(b64urlToBytes(s));
+}
+
+
+// Proxy a GET to GolfCourseAPI with the secret key attached.
+async function proxyGolf(env, pathAndQuery) {
+ if (!env.GOLF_API_KEY) return json({ error: 'Server missing GOLF_API_KEY' }, 500);
+ try {
+   const r = await fetch(GOLF_API + pathAndQuery, {
+     method: 'GET',
+     headers: { 'Authorization': 'Key ' + env.GOLF_API_KEY },
+   });
+   const text = await r.text();
+   // Pass the upstream JSON straight through (status + body), add CORS.
+   return new Response(text, {
+     status: r.status,
+     headers: { 'content-type': 'application/json', ...CORS },
+   });
+ } catch (e) {
+   return json({ error: 'Course API request failed', detail: String(e) }, 502);
+ }
+}
+
+
+function json(obj, status = 200) {
+ return new Response(JSON.stringify(obj), {
+   status,
+   headers: { 'content-type': 'application/json', ...CORS },
+ });
+}
