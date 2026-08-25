@@ -39,6 +39,14 @@
 
 const GOLF_API = 'https://api.golfcourseapi.com';
 
+// Course ids from GolfCourseAPI are alphanumeric (e.g. "awfd6pev"), not numeric.
+// This used to require \d+, so every lookup fell through to the root status
+// response and the app saw a 200 with no course data in it. Restricted to
+// [A-Za-z0-9_-] so the captured id cannot contain a slash or a dot and is safe
+// to concatenate into the upstream path. Used for BOTH routing and the auth
+// gate below — they must agree, or a lookup would skip the auth check.
+const COURSE_RE = /\/v1\/courses\/([A-Za-z0-9_-]+)\/?$/;
+
 // ---- Auth configuration -----------------------------------------
 // Set to true ONLY after the app is confirmed to send "Authorization: Bearer <token>".
 const ENFORCE_AUTH = false;
@@ -75,7 +83,7 @@ export default {
 
 
    // The bare root is a harmless status page — it spends no API key, so it stays open.
-   const isRoot = request.method === 'GET' && path !== '/v1/search' && !path.endsWith('/v1/search') && !/\/v1\/courses\/(\d+)\/?$/.test(path);
+   const isRoot = request.method === 'GET' && path !== '/v1/search' && !path.endsWith('/v1/search') && !COURSE_RE.test(path);
 
 
    // ---- Auth gate (everything that costs money) -----------------
@@ -103,7 +111,7 @@ export default {
        return proxyGolf(env, '/v1/search?search_query=' + encodeURIComponent(q.trim()));
      }
      // /v1/courses/{id}
-     const m = path.match(/\/v1\/courses\/(\d+)\/?$/);
+     const m = path.match(COURSE_RE);
      if (m) {
        return proxyGolf(env, '/v1/courses/' + m[1]);
      }
