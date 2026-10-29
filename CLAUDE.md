@@ -90,6 +90,11 @@ and check it landed in both.
   settled it in one step. Ask for one when a bug depends on real data.
 - Fix only what was asked; mention anything else found rather than widening
   the change.
+- **Commit straight to `main`; no pull requests** (Conner's standing
+  instruction, Oct 2026). Push validated commits directly with
+  `git push origin HEAD:main`. Still run the fast checks and browser
+  verification first, since a push to `main` goes live. Never force-push
+  `main`.
 
 ## Architecture notes that matter
 
