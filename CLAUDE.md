@@ -205,10 +205,12 @@ much they matter:
    Play setup for groups of two or more. `play.strokes === 'low'` makes the
    dots show `pops` (CH minus the group's lowest CH). `ch` stays the full
    Course Handicap and still drives the net-double-bogey cap and posting.
-   **Still open:** the Arcade's `strokesOffLow` uses Handicap *Index*
-   differences (`Math.round(idx − low)`) and falls back to 10.0/14.0 when an
-   index is missing, so it can disagree with the Play card when tees or slope
-   differ. WHS uses Course Handicap differences. Not changed; ask Conner.
+   **Decided, leave as is (Oct 2026):** the Arcade's `strokesOffLow` stays
+   as it is. Its choices are gross or off low (no Full), it defaults to off
+   except Best Ball, and it works from Handicap *Index* differences
+   (`Math.round(idx − low)`, falling back to 10.0/14.0 when an index is
+   missing). So it can disagree with the Play card when tees or slope differ.
+   Conner chose not to change it; don't raise it again unless he does.
 5. **`ENFORCE_AUTH` is still `false`** (line 52 of `Scratch-backend.txt`).
    This is the long-standing second stage of the Worker auth rollout. Flipping
    it is a dashboard paste and redeploy, not a commit.
