@@ -171,10 +171,11 @@ Recent themes, oldest first:
   a full scorecard for solo rounds, the score as the main element, GIR
   derived, an "impossible hole" fix note, a badge sheet at the end of a round,
   and buddies' rounds kept when the buddy is removed.
-- **Oct 2026, 5.143.0**: 9-hole courses. Ratings stored as 18-hole numbers
+- **Oct 2026, 5.143.0–5.144.0**: 9-hole courses. Ratings stored as 18-hole numbers
   (with existing data repaired), odd/even stroke indexes when playing the
   nine twice, 18-hole par for Course Handicap, nines capped at net double
-  bogey, and tee editing in Edit Course, with courses merging newer-wins.
+  bogey, and tee editing in Edit Course, with courses merging newer-wins;
+  then a Full / Off low strokes toggle on the Play card.
 
 ## Open items and plans
 
@@ -199,11 +200,15 @@ much they matter:
    the 14 itself. If they're off like Point Venture's, the pops are wrong for
    the same reason. Ask Conner for the White tee's rating and slope. They can
    now be corrected in Edit Course.
-4. **The Play screen has no "strokes off low" option.** It always uses full
-   course handicap, so in a group a scratch player gets zero dots and a 20 gets
-   twenty. The Arcade games already have the setting (`strokesOffLow`); the
-   Play card doesn't. This may explain reports of pops looking wrong. Not yet
-   decided whether to add it.
+4. ~~The Play screen has no "strokes off low" option.~~ Added in 5.144.0:
+   a Strokes toggle (Full · Off low, default Full, with an (i) explainer) in
+   Play setup for groups of two or more. `play.strokes === 'low'` makes the
+   dots show `pops` (CH minus the group's lowest CH). `ch` stays the full
+   Course Handicap and still drives the net-double-bogey cap and posting.
+   **Still open:** the Arcade's `strokesOffLow` uses Handicap *Index*
+   differences (`Math.round(idx − low)`) and falls back to 10.0/14.0 when an
+   index is missing, so it can disagree with the Play card when tees or slope
+   differ. WHS uses Course Handicap differences. Not changed; ask Conner.
 5. **`ENFORCE_AUTH` is still `false`** (line 52 of `Scratch-backend.txt`).
    This is the long-standing second stage of the Worker auth rollout. Flipping
    it is a dashboard paste and redeploy, not a commit.
