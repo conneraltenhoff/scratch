@@ -145,8 +145,49 @@ Recent themes, oldest first:
 
 ## Open items and plans
 
-(Things discussed but not built, known issues, ideas. Add to this.)
+(Things discussed but not built, known issues, ideas. Add to this, and remove
+items once they're done or dropped.) As of 5.142.1, roughly in order of how
+much they matter:
 
+1. **Point Venture's tee ratings are wrong.** Every tee reads 33–34.6, a
+   nine-hole rating against an eighteen-hole par 72. Course handicap there
+   computes to about −32, so every stroke dot (pop) silently disappears on that
+   course and its differentials are wrong. This can't be fixed from the repo:
+   course data lives in Supabase, and the bundle has no reference to that
+   course. The tee ratings need correcting on the course record, either through
+   Supabase access or by Conner in the app's course editor, then the
+   differentials verified afterwards.
+2. **`adjGrossNine` allocates a nine-hole handicap against eighteen-hole
+   stroke indexes.** It under-allocates strokes on nine-hole rounds, so the
+   net-double-bogey cap is slightly too tight and those differentials come out
+   a little low. Real but small, and it only affects nine-hole rounds.
+3. **Vaaler Creek is unconfirmed.** The fourteen dots there are correct for
+   CH 14, but the White tee's rating and slope were never checked to confirm
+   the 14 itself. If they're off like Point Venture's, the pops are wrong for
+   the same reason. Ask Conner for the White tee's rating and slope.
+4. **The Play screen has no "strokes off low" option.** It always uses full
+   course handicap, so in a group a scratch player gets zero dots and a 20 gets
+   twenty. The Arcade games already have the setting (`strokesOffLow`); the
+   Play card doesn't. This may explain reports of pops looking wrong. Not yet
+   decided whether to add it.
+5. **`ENFORCE_AUTH` is still `false`** (line 52 of `Scratch-backend.txt`).
+   This is the long-standing second stage of the Worker auth rollout. Flipping
+   it is a dashboard paste and redeploy, not a commit.
+
+Smaller, discussed and left:
+
+- **A fallback for rounds whose course was deleted.** Such rounds currently
+  give a differential of 0, so deleting Plum Creek would move the Index from
+  15.6 to 9.2. A fix was offered and not taken up.
+- **Whether an unresolved impossible-hole fix note should block
+  auto-advance.** Currently it doesn't (chosen deliberately not to trap the
+  user); never explicitly confirmed with Conner.
+- **An Apple Watch app.** This was a feasibility question, not a request.
 - The Arcade guest sheet doesn't offer a returning guest's saved phone number
   yet; only the main Add a Guest sheet does (2d57413).
-- Haptics on the badge sheet haven't been verified on real hardware (f611088).
+
+Unverified on real hardware:
+
+- Whether the badge-sheet haptic fires on Conner's iPhone (f611088).
+- Whether the two-minute auto-advance survives the iOS PWA being backgrounded
+  in a pocket (c178160).
