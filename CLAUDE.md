@@ -72,7 +72,19 @@ and check it landed in both.
 - **Verify in a real browser** (Playwright/Chromium against the local server)
   at phone widths, 390 and 375 px, measuring rather than guessing. Demo
   mode gives seeded data; it is cloud-sandboxed and does not persist to
-  `fairway_v3`.
+  `fairway_v3`. Notes for doing that in a cloud session:
+  - The page loads React from unpkg.com, which the cloud sandbox may block.
+    `npm pack react@18.3.1 react-dom@18.3.1` works (the npm registry is
+    reachable); serve the UMD files with `page.route`.
+  - The app instance is the `.logic` of a `StreamableComponent`'s
+    `stateNode`: walk React fibers from any element to reach it.
+  - To get past the install gate, set `navigator.standalone = true` in an
+    init script. Plant data by writing `fairway_v3` to localStorage before
+    load. Without a signed-in account, the sign-in screen still covers most
+    screens: call methods directly and read the result, or screenshot sheets
+    that sit above it (the course edit sheet does).
+  - A `SyntaxError ... appendChild ... Unexpected token '-'` and one 404 on
+    boot happen on the untouched app too. They are not regressions.
 - Don't guess at the shape of the user's data. Several bugs took three tries
   because fixes were based on assumed data; a device dump (Web Inspector)
   settled it in one step. Ask for one when a bug depends on real data.
@@ -109,6 +121,23 @@ and check it landed in both.
 - **Handicap**: WHS. Differentials use the adjusted gross (each hole capped at
   net double bogey) when a round has all 18 hole scores and the course has
   par and stroke index; otherwise the raw score.
+- **Ratings are always 18-hole numbers**, on every tee, including on a 9-hole
+  course, where the rating is the one for playing the nine twice. A nine's
+  rating is half of it (`_nineRating`), unless the tee has `rating9f` /
+  `rating9b`. A rating from 22.5 up to 45 can only be a 9-hole number and is
+  doubled (`_fixNineTees`) on load, on every persist and on every merge. Use
+  `_par18(course)` wherever a Course Handicap is computed: a 9-hole layout's
+  stored par is the nine's.
+- **9-hole courses** (`courseIsNine`: a 9-hole layout): Play offers 9 or 18
+  holes. `doubleNine` / `singleNine` give the loops odd/even 18-hole stroke
+  indexes, ranked from the card's.
+- **Nines** are posted through `adjGrossNine` (9-hole Course Handicap, strokes
+  given to the hardest holes on that nine, net-double-bogey cap) and then
+  `nineToEighteenDiff` (WHS expected-score method). `diff9` is stored when the
+  round is saved; `cap9` marks a nine that has been capped.
+- **Courses merge newer-wins on `updatedAt`**, like rounds. Anything that
+  edits a course must stamp `updatedAt`, or other devices push the old copy
+  back.
 - **Fairway/green**: FIR is three-state (hit / miss / untracked) and only
   tracked holes count. GIR is derived from score minus putts against par minus
   two, with a tap to override.
@@ -142,6 +171,10 @@ Recent themes, oldest first:
   a full scorecard for solo rounds, the score as the main element, GIR
   derived, an "impossible hole" fix note, a badge sheet at the end of a round,
   and buddies' rounds kept when the buddy is removed.
+- **Oct 2026, 5.143.0**: 9-hole courses. Ratings stored as 18-hole numbers
+  (with existing data repaired), odd/even stroke indexes when playing the
+  nine twice, 18-hole par for Course Handicap, nines capped at net double
+  bogey, and tee editing in Edit Course, with courses merging newer-wins.
 
 ## Open items and plans
 
@@ -149,22 +182,23 @@ Recent themes, oldest first:
 items once they're done or dropped.) As of 5.142.1, roughly in order of how
 much they matter:
 
-1. **Point Venture's tee ratings are wrong.** Every tee reads 33–34.6, a
-   nine-hole rating against an eighteen-hole par 72. Course handicap there
-   computes to about −32, so every stroke dot (pop) silently disappears on that
-   course and its differentials are wrong. This can't be fixed from the repo:
-   course data lives in Supabase, and the bundle has no reference to that
-   course. The tee ratings need correcting on the course record, either through
-   Supabase access or by Conner in the app's course editor, then the
-   differentials verified afterwards.
-2. **`adjGrossNine` allocates a nine-hole handicap against eighteen-hole
-   stroke indexes.** It under-allocates strokes on nine-hole rounds, so the
-   net-double-bogey cap is slightly too tight and those differentials come out
-   a little low. Real but small, and it only affects nine-hole rounds.
+1. **Check Point Venture on the real account (5.143.0).** Its 9-hole tee
+   ratings (33–34.6) are now doubled automatically on load: White becomes 69.2,
+   matching the published 18-hole ratings Conner provided (Black 70.6/124,
+   Blue 70.5/124, White 69.2/119, Gold 66.8/110, Red 65.8/101, Silver 54.4/80,
+   plus combo tees). Its rounds' saved ratings and past nines are repaired too.
+   This was only tested on planted data shaped like it. On the real account,
+   confirm the tees read the published numbers (correct any in Edit Course),
+   the Course Handicap there is about 15, stroke dots appear, and the Index
+   move is believable. There's no scorecard for Point Venture, so its par and
+   stroke indexes are unverified.
+2. ~~`adjGrossNine` under-allocates on nine-hole rounds.~~ Fixed in 5.143.0.
+   The real fault was that nothing called it, so nines posted their raw score.
 3. **Vaaler Creek is unconfirmed.** The fourteen dots there are correct for
    CH 14, but the White tee's rating and slope were never checked to confirm
    the 14 itself. If they're off like Point Venture's, the pops are wrong for
-   the same reason. Ask Conner for the White tee's rating and slope.
+   the same reason. Ask Conner for the White tee's rating and slope. They can
+   now be corrected in Edit Course.
 4. **The Play screen has no "strokes off low" option.** It always uses full
    course handicap, so in a group a scratch player gets zero dots and a 20 gets
    twenty. The Arcade games already have the setting (`strokesOffLow`); the
