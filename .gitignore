@@ -6,3 +6,6 @@
 
 # Wrangler local state
 .wrangler/
+
+# Python bytecode (tools/bundle.py)
+__pycache__/
