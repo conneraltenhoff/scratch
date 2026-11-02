@@ -166,7 +166,14 @@ and check it landed in both.
   counts toward their Index, as Conner asked. It carries `teamFormat:
   'bestball'`, `teamGross` / `teamNet` / `teamPar` / `teamHoles`,
   `teamStrokes` and `partners` (`_bestBallFields`). `_bestBall` computes the
-  team's best ball, net using the card's strokes (Full or Off low).
+  team's best ball, net using the card's strokes.
+  **Strokes by format** (5.146.0, `_playStrokesChoices` / `_playStrokesMode`):
+  stroke play is Full · Off low; best ball is None · Full · Off low
+  (default Full, and None is gross: no dots, `teamNet: null`); scramble is
+  None · Team hcp (default None). Team hcp is the USGA scramble allowance
+  (`_scrambleTeamHcp`: 35/15%, 30/20/10%, 25/20/15/10% of Course Handicaps,
+  lowest first). It drives the team card's pops and a net team score, saved
+  as `teamHcp` / `teamNet` on scramble rounds. None of it changes posting.
   The Arcade's Best Ball and Scramble also allow **1 Team** (5.145.1):
   `numTeamsEff` goes down to 1, and with one team Best Ball shows a running
   team total against par instead of a match, Scramble shows the team's
@@ -200,7 +207,9 @@ Recent themes, oldest first:
   then a Full / Off low strokes toggle on the Play card.
 - **Nov 2026, 5.145.0**: Best Ball in Play for one team, with live team
   gross/net, and an optional event name on scramble and best ball rounds;
-  5.145.1 lets the Arcade's Best Ball and Scramble run with one team.
+  5.145.1 lets the Arcade's Best Ball and Scramble run with one team;
+  5.145.2 puts the Format picker back in Play setup; 5.146.0 makes pops
+  optional for team rounds.
 
 ## Open items and plans
 
