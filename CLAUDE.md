@@ -155,7 +155,11 @@ and check it landed in both.
   the background, so use wall-clock time; the visual viewport sometimes never
   shrinks for the keyboard (see `_kbFitFocus` / `_kbFitReset`).
 
-- **Team rounds in Play** (5.145.0): Scramble and Best Ball both track one
+- **Team rounds in Play** (5.145.0; picker added 5.145.2): a Format
+  picker at the top of Play setup (`playFmtPills`) chooses Stroke Play,
+  Scramble or Best Ball. Before 5.145.2 Play had no picker at all, so test
+  through the real setup taps, not by setting `play.format` directly.
+  Scramble and Best Ball both track one
   team, with no opponent. `play.event` (optional) is saved as `event` on each
   round. A scramble round has `format: 'scramble'` and never counts. A best
   ball round deliberately has **no `format`**, so each player's own 18
