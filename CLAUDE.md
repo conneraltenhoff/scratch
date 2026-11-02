@@ -162,8 +162,11 @@ and check it landed in both.
   counts toward their Index, as Conner asked. It carries `teamFormat:
   'bestball'`, `teamGross` / `teamNet` / `teamPar` / `teamHoles`,
   `teamStrokes` and `partners` (`_bestBallFields`). `_bestBall` computes the
-  team's best ball, net using the card's strokes (Full or Off low). The
-  Arcade's team games still need two teams; that is separate.
+  team's best ball, net using the card's strokes (Full or Off low).
+  The Arcade's Best Ball and Scramble also allow **1 Team** (5.145.1):
+  `numTeamsEff` goes down to 1, and with one team Best Ball shows a running
+  team total against par instead of a match, Scramble shows the team's
+  score with no winner, and nothing is settled.
 
 ## History
 
@@ -192,7 +195,8 @@ Recent themes, oldest first:
   bogey, and tee editing in Edit Course, with courses merging newer-wins;
   then a Full / Off low strokes toggle on the Play card.
 - **Nov 2026, 5.145.0**: Best Ball in Play for one team, with live team
-  gross/net, and an optional event name on scramble and best ball rounds.
+  gross/net, and an optional event name on scramble and best ball rounds;
+  5.145.1 lets the Arcade's Best Ball and Scramble run with one team.
 
 ## Open items and plans
 
