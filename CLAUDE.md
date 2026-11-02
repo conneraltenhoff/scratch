@@ -155,6 +155,16 @@ and check it landed in both.
   the background, so use wall-clock time; the visual viewport sometimes never
   shrinks for the keyboard (see `_kbFitFocus` / `_kbFitReset`).
 
+- **Team rounds in Play** (5.145.0): Scramble and Best Ball both track one
+  team, with no opponent. `play.event` (optional) is saved as `event` on each
+  round. A scramble round has `format: 'scramble'` and never counts. A best
+  ball round deliberately has **no `format`**, so each player's own 18
+  counts toward their Index, as Conner asked. It carries `teamFormat:
+  'bestball'`, `teamGross` / `teamNet` / `teamPar` / `teamHoles`,
+  `teamStrokes` and `partners` (`_bestBallFields`). `_bestBall` computes the
+  team's best ball, net using the card's strokes (Full or Off low). The
+  Arcade's team games still need two teams; that is separate.
+
 ## History
 
 The current version is in `BUILD_VERSION`; the latest work is in `git log`.
@@ -181,6 +191,8 @@ Recent themes, oldest first:
   nine twice, 18-hole par for Course Handicap, nines capped at net double
   bogey, and tee editing in Edit Course, with courses merging newer-wins;
   then a Full / Off low strokes toggle on the Play card.
+- **Nov 2026, 5.145.0**: Best Ball in Play for one team, with live team
+  gross/net, and an optional event name on scramble and best ball rounds.
 
 ## Open items and plans
 
